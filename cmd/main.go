@@ -41,30 +41,36 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
 
-	out, in := make(chan *schema.Message), s.ScanMessages()
+	in, out := make(chan *schema.Message), make(chan *schema.Message)
 	group.Go(func() error {
-		if err := s.RunScan(ctx); err != nil {
+		if err := s.Scan(ctx, in); err != nil {
 			return err
 		}
 		log.Printf("[INFO] scan done\n")
-		close(out)
+		cancel()
 		return ctx.Err()
 	})
 
 	group.Go(func() error {
-		return o.Write(ctx, out)
-	})
-
-	group.Go(func() error {
+		count := 0
 		for {
 			select {
 			case <-ctx.Done():
-				return nil
-			case m := <-in:
-				log.Printf("[DEBUG] process messages: %#v\n", m)
+				log.Printf("[INFO] %d messages processed\n", count)
+				return ctx.Err()
+			case m, ok := <-in:
+				if !ok {
+					close(out)
+					return nil
+				}
 				out <- m
+				count++
 			}
 		}
+	})
+
+	group.Go(func() error {
+		return o.Write(ctx, out)
 	})
 
 	// handle termination
@@ -77,7 +83,7 @@ func main() {
 		break
 	}
 
-	if err := group.Wait(); !errors.Is(err, context.Canceled) {
+	if err := group.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		log.Printf("[ERROR] shutdown: %s\n", err.Error())
 	}
 

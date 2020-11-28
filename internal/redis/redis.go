@@ -10,16 +10,11 @@ import (
 
 type redis struct {
 	pool *radix.Pool
-	out  chan *schema.Message
 }
 
 func New(connection string) (schema.Redis, error) {
 	db, err := radix.NewPool("tcp", connection, 0)
-	return &redis{pool: db, out: make(chan *schema.Message)}, err
-}
-
-func (r *redis) ScanMessages() <-chan *schema.Message {
-	return r.out
+	return &redis{pool: db}, err
 }
 
 func (r *redis) getTTL(key string) (string, error) {
@@ -40,20 +35,27 @@ func (r *redis) getTTL(key string) (string, error) {
 	return ttl, nil
 }
 
-func (r *redis) RunScan(ctx context.Context) error {
+func (r *redis) Scan(ctx context.Context, out chan<- *schema.Message) error {
 	var key, value string
 	scanner := radix.NewScanner(r.pool, radix.ScanAllKeys)
-	for scanner.Next(&key) {
-		if err := r.pool.Do(radix.Cmd(&value, "DUMP", key)); err != nil {
-			return err
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if !scanner.Next(&key) {
+				return scanner.Close()
+			}
+			if err := r.pool.Do(radix.Cmd(&value, "DUMP", key)); err != nil {
+				return err
+			}
+			ttl, err := r.getTTL(key)
+			if err != nil {
+				return err
+			}
+			out <- &schema.Message{Key: key, Value: value, TTL: ttl}
 		}
-		ttl, err := r.getTTL(key)
-		if err != nil {
-			return err
-		}
-		r.out <- &schema.Message{Key: key, Value: value, TTL: ttl}
 	}
-	return scanner.Close()
 }
 
 func (r *redis) Write(ctx context.Context, in <-chan *schema.Message) error {

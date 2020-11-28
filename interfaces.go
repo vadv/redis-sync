@@ -16,8 +16,7 @@ type Redis interface {
 }
 
 type RedisScanner interface {
-	RunScan(ctx context.Context) error
-	ScanMessages() <-chan *Message
+	Scan(ctx context.Context, out chan<- *Message) error
 }
 
 type RedisWriter interface {
