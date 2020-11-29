@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/cheggaaa/pb/v3"
 	"golang.org/x/sync/errgroup"
 
 	schema "gitlab.diskarte.net/engineering/redis-sync"
@@ -23,10 +24,17 @@ var (
 func main() {
 
 	flag.Parse()
+
 	s, err := redis.New(*fSource)
 	if err != nil {
 		panic(err)
 	}
+	count, err := s.DbSize()
+	if err != nil {
+		panic(err)
+	}
+	bar := pb.StartNew(count)
+
 	o, err := redis.New(*fOut)
 	if err != nil {
 		panic(err)
@@ -52,11 +60,10 @@ func main() {
 	})
 
 	group.Go(func() error {
-		count := 0
+		defer bar.Finish()
 		for {
 			select {
 			case <-ctx.Done():
-				log.Printf("[INFO] %d messages processed\n", count)
 				return ctx.Err()
 			case m, ok := <-in:
 				if !ok {
@@ -64,7 +71,7 @@ func main() {
 					return nil
 				}
 				out <- m
-				count++
+				bar.Increment()
 			}
 		}
 	})

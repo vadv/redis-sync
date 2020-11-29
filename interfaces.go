@@ -13,6 +13,7 @@ type Message struct {
 type Redis interface {
 	RedisScanner
 	RedisWriter
+	RedisInfo
 }
 
 type RedisScanner interface {
@@ -21,4 +22,8 @@ type RedisScanner interface {
 
 type RedisWriter interface {
 	Write(ctx context.Context, in <-chan *Message) error
+}
+
+type RedisInfo interface {
+	DbSize() (int, error)
 }

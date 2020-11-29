@@ -73,3 +73,8 @@ func (r *redis) Write(ctx context.Context, in <-chan *schema.Message) error {
 		}
 	}
 }
+
+func (r *redis) DbSize() (int, error) {
+	var info int
+	return info, r.pool.Do(radix.Cmd(&info, "DBSIZE"))
+}
