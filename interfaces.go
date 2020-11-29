@@ -10,20 +10,20 @@ type Message struct {
 	TTL   string // "0" means ttl is not set
 }
 
-type Redis interface {
-	RedisScanner
-	RedisWriter
-	RedisInfo
-}
-
-type RedisScanner interface {
+type Scanner interface {
 	Scan(ctx context.Context, out chan<- *Message) error
 }
 
-type RedisWriter interface {
+type Writer interface {
 	Write(ctx context.Context, in <-chan *Message) error
 }
 
-type RedisInfo interface {
-	DbSize() (int, error)
+type Info interface {
+	Size() (int, error)
+}
+
+type Redis interface {
+	Scanner
+	Writer
+	Info
 }

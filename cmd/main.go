@@ -7,12 +7,14 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/cheggaaa/pb/v3"
 	"golang.org/x/sync/errgroup"
 
 	schema "gitlab.diskarte.net/engineering/redis-sync"
+	"gitlab.diskarte.net/engineering/redis-sync/internal/null"
 	"gitlab.diskarte.net/engineering/redis-sync/internal/redis"
 )
 
@@ -25,19 +27,23 @@ func main() {
 
 	flag.Parse()
 
-	s, err := redis.New(*fSource)
-	if err != nil {
-		panic(err)
-	}
-	count, err := s.DbSize()
-	if err != nil {
-		panic(err)
-	}
-	bar := pb.StartNew(count)
+	var err error
+	var s schema.Redis
+	var o schema.Writer
 
-	o, err := redis.New(*fOut)
+	s, err = redis.New(*fSource)
 	if err != nil {
 		panic(err)
+	}
+
+	switch {
+	case strings.HasPrefix(*fOut, `redis://`):
+		o, err = redis.New(*fOut)
+		if err != nil {
+			panic(err)
+		}
+	default:
+		o = &null.Writer{}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -49,7 +55,7 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
 
-	in, out := make(chan *schema.Message), make(chan *schema.Message)
+	in, out := make(chan *schema.Message, 1024), make(chan *schema.Message, 1024)
 	group.Go(func() error {
 		if err := s.Scan(ctx, in); err != nil {
 			return err
@@ -58,6 +64,12 @@ func main() {
 		cancel()
 		return ctx.Err()
 	})
+
+	count, err := s.Size()
+	if err != nil {
+		panic(err)
+	}
+	bar := pb.StartNew(count)
 
 	group.Go(func() error {
 		defer bar.Finish()
