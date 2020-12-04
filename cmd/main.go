@@ -89,8 +89,19 @@ func main() {
 					close(out)
 					return nil
 				}
-				r.Get(key)
-				out <- &schema.Message{Key: key}
+				m, ok := r.Get(key)
+				if !ok {
+					sourceM, err := s.Get(key)
+					if err != nil {
+						log.Printf("[ERROR] get key %#v: %s\n", key, err)
+						break
+					}
+					if err := r.Set(sourceM); err != nil {
+						panic(err)
+					}
+					m = sourceM
+				}
+				out <- m
 				bar.Increment()
 			}
 		}
