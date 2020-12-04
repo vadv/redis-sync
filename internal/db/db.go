@@ -12,7 +12,7 @@ type db struct {
 }
 
 func Open(dsn, namespace string) (schema.DB, error) {
-	r := reindexer.NewReindex(dsn)
+	r := reindexer.NewReindex(dsn, reindexer.WithCreateDBIfMissing())
 	return &db{indexer: r, namespace: namespace},
 		r.OpenNamespace(namespace, reindexer.DefaultNamespaceOptions(), schema.Message{})
 }
