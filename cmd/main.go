@@ -96,6 +96,13 @@ func main() {
 						log.Printf("[ERROR] get key %#v: %s\n", key, err)
 						break
 					}
+					if sourceM.TTL != "0" {
+						if err := r.Set(sourceM); err != nil {
+							panic(err)
+						}
+						bar.Increment()
+						break
+					}
 					if err := r.Set(sourceM); err != nil {
 						panic(err)
 					}
