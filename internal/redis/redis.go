@@ -35,8 +35,8 @@ func (r *redis) getTTL(key string) (string, error) {
 	return ttl, nil
 }
 
-func (r *redis) Scan(ctx context.Context, out chan<- *schema.Message) error {
-	var key, value string
+func (r *redis) ScanKeys(ctx context.Context, out chan<- string) error {
+	var key string
 	scanner := radix.NewScanner(r.pool, radix.ScanAllKeys)
 	for {
 		select {
@@ -46,16 +46,21 @@ func (r *redis) Scan(ctx context.Context, out chan<- *schema.Message) error {
 			if !scanner.Next(&key) {
 				return scanner.Close()
 			}
-			if err := r.pool.Do(radix.Cmd(&value, "DUMP", key)); err != nil {
-				return err
-			}
-			ttl, err := r.getTTL(key)
-			if err != nil {
-				return err
-			}
-			out <- &schema.Message{Key: key, Value: value, TTL: ttl}
+			out <- key
 		}
 	}
+}
+
+func (r *redis) Get(key string) (*schema.Message, error) {
+	var value string
+	ttl, err := r.getTTL(key)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.pool.Do(radix.Cmd(&value, "DUMP", key)); err != nil {
+		return nil, err
+	}
+	return &schema.Message{Value: value, Key: key, TTL: ttl}, nil
 }
 
 func (r *redis) Write(ctx context.Context, in <-chan *schema.Message) error {

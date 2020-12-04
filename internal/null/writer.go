@@ -6,9 +6,13 @@ import (
 	schema "gitlab.diskarte.net/engineering/redis-sync"
 )
 
-type Writer struct{}
+func Writer() schema.Writer {
+	return &w{}
+}
 
-func (n *Writer) Write(ctx context.Context, in <-chan *schema.Message) error {
+type w struct{}
+
+func (n *w) Write(ctx context.Context, in <-chan *schema.Message) error {
 	for {
 		select {
 		case <-ctx.Done():

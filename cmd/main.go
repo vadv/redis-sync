@@ -7,20 +7,22 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/cheggaaa/pb/v3"
 	"golang.org/x/sync/errgroup"
 
 	schema "gitlab.diskarte.net/engineering/redis-sync"
+	"gitlab.diskarte.net/engineering/redis-sync/internal/db"
 	"gitlab.diskarte.net/engineering/redis-sync/internal/null"
 	"gitlab.diskarte.net/engineering/redis-sync/internal/redis"
 )
 
 var (
-	fSource = flag.String("source", "redis://localhost:6379/0", "Connection to source redis")
-	fOut    = flag.String("out", "redis://localhost:6379/1", "Connection to out redis")
+	fSource           = flag.String("source", "redis://localhost:6379/0", "Connection to source redis")
+	fOut              = flag.String("out", "redis://localhost:6379/1", "Connection to out redis")
+	fLocalDB          = flag.String("db", "cproto://127.0.0.1:6534/redis-cache", "Reindexer dsn")
+	fLocalDBNameSpace = flag.String("db-namespace", "default", "Namespace")
 )
 
 func main() {
@@ -37,13 +39,18 @@ func main() {
 	}
 
 	switch {
-	case strings.HasPrefix(*fOut, `redis://`):
+	case *fOut == `/dev/null`:
+		o = null.Writer()
+	default:
 		o, err = redis.New(*fOut)
 		if err != nil {
 			panic(err)
 		}
-	default:
-		o = &null.Writer{}
+	}
+
+	r, err := db.Open(*fLocalDB, *fLocalDBNameSpace)
+	if err != nil {
+		panic(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -55,9 +62,9 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
 
-	in, out := make(chan *schema.Message, 1024), make(chan *schema.Message, 1024)
+	in, out := make(chan string, 64*1024), make(chan *schema.Message, 64*1024)
 	group.Go(func() error {
-		if err := s.Scan(ctx, in); err != nil {
+		if err := s.ScanKeys(ctx, in); err != nil {
 			return err
 		}
 		log.Printf("[INFO] scan done\n")
@@ -69,7 +76,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	bar := pb.StartNew(count)
+	bar := pb.Full.Start(count)
 
 	group.Go(func() error {
 		defer bar.Finish()
@@ -77,12 +84,13 @@ func main() {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case m, ok := <-in:
+			case key, ok := <-in:
 				if !ok {
 					close(out)
 					return nil
 				}
-				out <- m
+				r.Get(key)
+				out <- &schema.Message{Key: key}
 				bar.Increment()
 			}
 		}

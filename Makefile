@@ -17,7 +17,7 @@ lint:
 #
 # Application must be statically-linked to run in `FROM scratch` container
 build:
-	go build --ldflags "-s -w -linkmode external -extldflags -static -X main.programVersion=$(CI_BRANCH)" -o ./bin/utils ./cmd/
+	go build -o ./bin/utils ./cmd/
 
 build_docker:
 	docker build --tag=coinsph/bender:latest --file=docker/local.Dockerfile .

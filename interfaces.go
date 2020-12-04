@@ -5,13 +5,14 @@ import (
 )
 
 type Message struct {
-	Key   string
-	Value string
-	TTL   string // "0" means ttl is not set
+	Key   string `reindex:"id,,pk"`
+	Value string `reindex:"value"`
+	TTL   string `reindex:"ttl"` // "0" means ttl is not set
 }
 
 type Scanner interface {
-	Scan(ctx context.Context, out chan<- *Message) error
+	ScanKeys(ctx context.Context, out chan<- string) error
+	Get(key string) (*Message, error)
 }
 
 type Writer interface {
@@ -26,4 +27,9 @@ type Redis interface {
 	Scanner
 	Writer
 	Info
+}
+
+type DB interface {
+	Get(key string) (*Message, bool)
+	Set(value *Message) error
 }
